@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>BA Document Intelligence Studio</title>
+  <style>
+    body { font-family: Arial; padding: 40px; }
+    button { padding: 10px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h1>BA Document Intelligence Studio</h1>
+  <h3>Create Project</h3>
+  <input id="name" placeholder="Project name" />
+  <input id="type" placeholder="Document type" />
+  <button onclick="createProject()">Create</button>
+
+  <h3>Projects</h3>
+  <ul id="list"></ul>
+
+<script>
+async function loadProjects() {
+  const res = await fetch("/api/projects");
+  const data = await res.json();
+  const list = document.getElementById("list");
+  list.innerHTML = "";
+  data.forEach(p => {
+    const li = document.createElement("li");
+    li.textContent = p.name + " (" + p.documentType + ")";
+    list.appendChild(li);
+  });
+}
+
+async function createProject() {
+  const name = document.getElementById("name").value;
+  const type = document.getElementById("type").value;
+
+  await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, documentType: type })
+  });
+
+  loadProjects();
+}
+
+loadProjects();
+</script>
+</body>
+</html>
