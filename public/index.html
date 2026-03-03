@@ -11,9 +11,12 @@
     button { padding: 6px 12px; margin: 5px 5px 5px 0; cursor: pointer; }
     .card { border: 1px solid #ddd; padding: 10px; margin: 5px 0; cursor: pointer; }
     .breadcrumb { margin-bottom: 20px; font-weight: bold; color: #444; }
-    .ai-box { border: 1px solid #aaa; padding: 10px; margin-top: 15px; background:#f9f9f9; }
-    .ai-section { margin-bottom: 10px; }
-    .ai-section h4 { margin-bottom: 5px; }
+    .ai-box { border: 1px solid #aaa; padding: 15px; margin-top: 15px; background:#f9f9f9; }
+    .score { font-size: 20px; font-weight: bold; padding: 5px 10px; border-radius: 5px; display:inline-block; }
+    .green { background:#d4edda; color:#155724; }
+    .yellow { background:#fff3cd; color:#856404; }
+    .red { background:#f8d7da; color:#721c24; }
+    .history-item { border-top:1px solid #ddd; padding-top:5px; margin-top:5px; cursor:pointer; }
   </style>
 </head>
 <body>
@@ -24,270 +27,226 @@
 
 <script>
 
-let currentProject = null;
-let currentDocument = null;
-let currentVersion = null;
+let currentProject=null;
+let currentDocument=null;
+let currentVersion=null;
 
-function setBreadcrumb() {
-  let text = "Projects";
-  if (currentProject) text += " > " + currentProject.name;
-  if (currentDocument) text += " > " + currentDocument.name;
-  if (currentVersion) text += " > v" + currentVersion.versionNumber;
-  document.getElementById("breadcrumb").innerText = text;
+function setBreadcrumb(){
+  let text="Projects";
+  if(currentProject) text+=" > "+currentProject.name;
+  if(currentDocument) text+=" > "+currentDocument.name;
+  if(currentVersion) text+=" > v"+currentVersion.versionNumber;
+  document.getElementById("breadcrumb").innerText=text;
 }
 
 /* ================= PROJECTS ================= */
 
-async function loadProjects() {
-  currentProject = null;
-  currentDocument = null;
-  currentVersion = null;
+async function loadProjects(){
+  currentProject=null; currentDocument=null; currentVersion=null;
   setBreadcrumb();
 
-  const res = await fetch("/api/projects");
-  const projects = await res.json();
+  const res=await fetch("/api/projects");
+  const projects=await res.json();
 
-  let html = `
-    <h2>Create Project</h2>
-    <input id="pname" placeholder="Project name"/>
-    <textarea id="pdesc" placeholder="Description"></textarea><br>
-    <button onclick="createProject()">Create</button>
-    <h2>Projects</h2>
-  `;
+  let html=`<h2>Create Project</h2>
+  <input id="pname" placeholder="Project name"/>
+  <textarea id="pdesc" placeholder="Description"></textarea><br>
+  <button onclick="createProject()">Create</button>
+  <h2>Projects</h2>`;
 
-  projects.forEach(p => {
-    html += `<div class="card" onclick='openProject(${JSON.stringify(p)})'>${p.name}</div>`;
+  projects.forEach(p=>{
+    html+=`<div class="card" onclick='openProject(${JSON.stringify(p)})'>${p.name}</div>`;
   });
 
-  document.getElementById("content").innerHTML = html;
+  document.getElementById("content").innerHTML=html;
 }
 
-async function createProject() {
-  const name = document.getElementById("pname").value.trim();
-  const description = document.getElementById("pdesc").value.trim();
-  if (!name) return alert("Project name required");
+async function createProject(){
+  const name=document.getElementById("pname").value.trim();
+  const description=document.getElementById("pdesc").value.trim();
+  if(!name) return alert("Project name required");
 
-  await fetch("/api/projects", {
+  await fetch("/api/projects",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({name,description})
+    body:JSON.stringify({name,description})
   });
 
   loadProjects();
 }
 
-function openProject(project){
-  currentProject = project;
-  currentDocument = null;
-  currentVersion = null;
-  loadDocuments();
-}
+function openProject(p){ currentProject=p; loadDocuments(); }
 
 /* ================= DOCUMENTS ================= */
 
 async function loadDocuments(){
+  currentDocument=null; currentVersion=null;
   setBreadcrumb();
-  const res = await fetch(`/api/documents/${currentProject.id}`);
-  const docs = await res.json();
 
-  let html = `
-    <button onclick="loadProjects()">← Back</button>
-    <h2>Create Document</h2>
-    <input id="dname" placeholder="Document name"/>
-    <select id="dtype">
-      <option>SRS</option>
-      <option>BRD</option>
-      <option>FRD</option>
-      <option>User Story</option>
-      <option>Test Spec</option>
-      <option>API Spec</option>
-    </select><br>
-    <button onclick="createDocument()">Create</button>
-    <h2>Documents</h2>
-  `;
+  const res=await fetch(`/api/documents/${currentProject.id}`);
+  const docs=await res.json();
+
+  let html=`<button onclick="loadProjects()">← Back</button>
+  <h2>Create Document</h2>
+  <input id="dname" placeholder="Document name"/>
+  <select id="dtype">
+    <option>SRS</option>
+    <option>BRD</option>
+    <option>FRD</option>
+    <option>User Story</option>
+  </select><br>
+  <button onclick="createDocument()">Create</button>
+  <h2>Documents</h2>`;
 
   docs.forEach(d=>{
-    html += `<div class="card" onclick='openDocument(${JSON.stringify(d)})'>
+    html+=`<div class="card" onclick='openDocument(${JSON.stringify(d)})'>
       ${d.name} (${d.type})
     </div>`;
   });
 
-  document.getElementById("content").innerHTML = html;
+  document.getElementById("content").innerHTML=html;
 }
 
 async function createDocument(){
-  const name = document.getElementById("dname").value.trim();
-  const type = document.getElementById("dtype").value;
+  const name=document.getElementById("dname").value.trim();
+  const type=document.getElementById("dtype").value;
   if(!name) return alert("Document name required");
 
   await fetch("/api/documents",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({projectId:currentProject.id,name,type})
+    body:JSON.stringify({projectId:currentProject.id,name,type})
   });
 
   loadDocuments();
 }
 
-function openDocument(doc){
-  currentDocument = doc;
-  currentVersion = null;
-  loadVersions();
-}
+function openDocument(d){ currentDocument=d; loadVersions(); }
 
 /* ================= VERSIONS ================= */
 
 async function loadVersions(){
+  currentVersion=null;
   setBreadcrumb();
-  const res = await fetch(`/api/versions/${currentDocument.id}`);
-  const versions = await res.json();
 
-  let html = `
-    <button onclick="loadDocuments()">← Back</button>
-    <h2>Create Version</h2>
-    <input id="vnumber" placeholder="Version (e.g. 1.0)"/>
-    <textarea id="vlog" placeholder="Change log"></textarea><br>
-    <button onclick="createVersion()">Create</button>
-    <h2>Versions</h2>
-  `;
+  const res=await fetch(`/api/versions/${currentDocument.id}`);
+  const versions=await res.json();
+
+  let html=`<button onclick="loadDocuments()">← Back</button>
+  <h2>Create Version</h2>
+  <input id="vnumber" placeholder="Version (1.0)"/>
+  <textarea id="vlog" placeholder="Change log"></textarea><br>
+  <button onclick="createVersion()">Create</button>
+  <h2>Versions</h2>`;
 
   versions.forEach(v=>{
-    html += `<div class="card" onclick='openVersion(${JSON.stringify(v)})'>
+    html+=`<div class="card" onclick='openVersion(${JSON.stringify(v)})'>
       v${v.versionNumber}
     </div>`;
   });
 
-  document.getElementById("content").innerHTML = html;
+  document.getElementById("content").innerHTML=html;
 }
 
 async function createVersion(){
-  const versionNumber = document.getElementById("vnumber").value.trim();
-  const changeLog = document.getElementById("vlog").value.trim();
+  const versionNumber=document.getElementById("vnumber").value.trim();
+  const changeLog=document.getElementById("vlog").value.trim();
   if(!versionNumber) return alert("Version required");
 
   await fetch("/api/versions",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({documentId:currentDocument.id,versionNumber,changeLog})
+    body:JSON.stringify({documentId:currentDocument.id,versionNumber,changeLog})
   });
 
   loadVersions();
 }
 
-function openVersion(version){
-  currentVersion = version;
-  loadRequirements();
-}
+function openVersion(v){ currentVersion=v; loadRequirements(); }
 
 /* ================= REQUIREMENTS ================= */
 
 async function loadRequirements(){
   setBreadcrumb();
-  const res = await fetch(`/api/requirements/${currentVersion.id}`);
-  const reqs = await res.json();
 
-  let html = `
-    <button onclick="loadVersions()">← Back</button>
-    <button onclick="runAIReview()">AI Review</button>
-    <button onclick="exportWord()">Export to Word</button>
-    <h2>Create Requirement</h2>
-    <select id="rtype">
-      <option>UC</option>
-      <option>US</option>
-      <option>AC</option>
-      <option>BR</option>
-      <option>NFR</option>
-    </select><br>
-    <input id="rtitle" placeholder="Title"/><br>
-    <textarea id="rdesc" placeholder="Description"></textarea><br>
-    <select id="rpriority">
-      <option>High</option>
-      <option>Medium</option>
-      <option>Low</option>
-    </select>
-    <select id="rstatus">
-      <option>Draft</option>
-      <option>Reviewed</option>
-      <option>Approved</option>
-    </select><br>
-    <button onclick="createRequirement()">Create</button>
-    <h2>Requirements</h2>
-  `;
+  const res=await fetch(`/api/requirements/${currentVersion.id}`);
+  const reqs=await res.json();
+
+  let html=`<button onclick="loadVersions()">← Back</button>
+  <button onclick="runAIReview()">AI Review</button>
+  <button onclick="exportWord()">Export Word</button>
+  <h2>Requirements</h2>`;
 
   reqs.forEach(r=>{
-    html += `<div class="card">[${r.type}] ${r.title} (${r.priority})</div>`;
+    html+=`<div class="card">[${r.type}] ${r.title}</div>`;
   });
 
-  html += `<div id="aiResult"></div>`;
+  html+=`<div id="aiSection"></div>`;
+  document.getElementById("content").innerHTML=html;
 
-  document.getElementById("content").innerHTML = html;
-}
-
-async function createRequirement(){
-  const type=document.getElementById("rtype").value;
-  const title=document.getElementById("rtitle").value.trim();
-  const description=document.getElementById("rdesc").value.trim();
-  const priority=document.getElementById("rpriority").value;
-  const status=document.getElementById("rstatus").value;
-
-  if(!title) return alert("Title required");
-  if(!description) return alert("Description required");
-
-  await fetch("/api/requirements",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({versionId:currentVersion.id,type,title,description,priority,status})
-  });
-
-  loadRequirements();
+  loadAIHistory();
 }
 
 /* ================= AI REVIEW ================= */
 
 async function runAIReview(){
-  document.getElementById("aiResult").innerHTML = "Running AI review...";
+  document.getElementById("aiSection").innerHTML="Running AI Review...";
 
-  const res = await fetch(`/api/ai-review/${currentVersion.id}`,{
-    method:"POST"
-  });
+  const res=await fetch(`/api/ai-review/${currentVersion.id}`,{method:"POST"});
+  const data=await res.json();
 
-  const data = await res.json();
+  renderAIResult(data);
+  loadAIHistory();
+}
 
-  if(data.raw){
-    document.getElementById("aiResult").innerHTML =
-      `<div class="ai-box"><pre>${data.raw}</pre></div>`;
+function renderAIResult(data){
+  if(!data.qualityScore){
+    document.getElementById("aiSection").innerHTML="<pre>"+JSON.stringify(data,null,2)+"</pre>";
     return;
   }
 
-  function renderSection(title, items){
-    if(!items || items.length===0) return "";
-    return `
-      <div class="ai-section">
-        <h4>${title}</h4>
-        <ul>${items.map(i=>`<li>${i}</li>`).join("")}</ul>
-      </div>
-    `;
-  }
+  let scoreClass="red";
+  if(data.qualityScore>=80) scoreClass="green";
+  else if(data.qualityScore>=50) scoreClass="yellow";
 
-  document.getElementById("aiResult").innerHTML = `
+  document.getElementById("aiSection").innerHTML=`
     <div class="ai-box">
-      <h3>AI Review Result</h3>
-      ${renderSection("Missing AC", data.missingAC)}
-      ${renderSection("Edge Cases", data.edgeCases)}
-      ${renderSection("Inconsistency", data.inconsistency)}
-      ${renderSection("Risk", data.risk)}
-      ${renderSection("Suggested NFR", data.suggestedNFR)}
+      <div class="score ${scoreClass}">
+        Quality Score: ${data.qualityScore}
+      </div>
+      <p><strong>Summary:</strong> ${data.summary}</p>
     </div>
   `;
 }
 
+async function loadAIHistory(){
+  const res=await fetch(`/api/ai-reviews/${currentVersion.id}`);
+  const history=await res.json();
+
+  if(history.length===0) return;
+
+  let html=`<div class="ai-box"><h3>Review History</h3>`;
+
+  history.forEach(h=>{
+    const data=JSON.parse(h.result_json);
+    html+=`
+      <div class="history-item" onclick='renderAIResult(${JSON.stringify(data)})'>
+        ${h.createdAt} — Score: ${h.qualityScore}
+      </div>
+    `;
+  });
+
+  html+="</div>";
+
+  document.getElementById("aiSection").innerHTML+=html;
+}
+
 function exportWord(){
-  window.location.href = `/api/export/${currentVersion.id}`;
+  window.location.href=`/api/export/${currentVersion.id}`;
 }
 
 loadProjects();
 
 </script>
-
 </body>
 </html>
