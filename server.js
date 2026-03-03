@@ -4,7 +4,6 @@ const path = require("path");
 
 const app = express();
 app.use(express.json());
-app.use(express.static("public"));
 
 /* ==============================
    DATABASE
@@ -18,7 +17,27 @@ db.serialize(() => {
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT,
-      documentType TEXT,
+      description TEXT,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      projectId INTEGER,
+      name TEXT,
+      type TEXT,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      documentId INTEGER,
+      versionNumber TEXT,
+      changeLog TEXT,
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
@@ -26,7 +45,7 @@ db.serialize(() => {
   db.run(`
     CREATE TABLE IF NOT EXISTS requirements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      projectId INTEGER,
+      versionId INTEGER,
       type TEXT,
       title TEXT,
       description TEXT,
@@ -42,7 +61,6 @@ db.serialize(() => {
    PROJECT APIs
 =================================*/
 
-// Get all projects
 app.get("/api/projects", (req, res) => {
   db.all("SELECT * FROM projects ORDER BY createdAt DESC", [], (err, rows) => {
     if (err) return res.status(500).json(err);
@@ -50,17 +68,70 @@ app.get("/api/projects", (req, res) => {
   });
 });
 
-// Create project
 app.post("/api/projects", (req, res) => {
-  const { name, documentType } = req.body;
+  const { name, description } = req.body;
 
-  if (!name || !documentType) {
-    return res.status(400).json({ error: "Missing name or documentType" });
-  }
+  if (!name) return res.status(400).json({ error: "Missing name" });
 
   db.run(
-    "INSERT INTO projects (name, documentType) VALUES (?, ?)",
-    [name, documentType],
+    "INSERT INTO projects (name, description) VALUES (?, ?)",
+    [name, description || ""],
+    function (err) {
+      if (err) return res.status(500).json(err);
+      res.json({ id: this.lastID });
+    }
+  );
+});
+
+/* ==============================
+   DOCUMENT APIs
+=================================*/
+
+app.get("/api/documents/:projectId", (req, res) => {
+  db.all(
+    "SELECT * FROM documents WHERE projectId = ?",
+    [req.params.projectId],
+    (err, rows) => {
+      if (err) return res.status(500).json(err);
+      res.json(rows);
+    }
+  );
+});
+
+app.post("/api/documents", (req, res) => {
+  const { projectId, name, type } = req.body;
+
+  db.run(
+    "INSERT INTO documents (projectId, name, type) VALUES (?, ?, ?)",
+    [projectId, name, type],
+    function (err) {
+      if (err) return res.status(500).json(err);
+      res.json({ id: this.lastID });
+    }
+  );
+});
+
+/* ==============================
+   VERSION APIs
+=================================*/
+
+app.get("/api/versions/:documentId", (req, res) => {
+  db.all(
+    "SELECT * FROM versions WHERE documentId = ?",
+    [req.params.documentId],
+    (err, rows) => {
+      if (err) return res.status(500).json(err);
+      res.json(rows);
+    }
+  );
+});
+
+app.post("/api/versions", (req, res) => {
+  const { documentId, versionNumber, changeLog } = req.body;
+
+  db.run(
+    "INSERT INTO versions (documentId, versionNumber, changeLog) VALUES (?, ?, ?)",
+    [documentId, versionNumber, changeLog],
     function (err) {
       if (err) return res.status(500).json(err);
       res.json({ id: this.lastID });
@@ -72,13 +143,10 @@ app.post("/api/projects", (req, res) => {
    REQUIREMENT APIs
 =================================*/
 
-// Get requirements by project
-app.get("/api/requirements/:projectId", (req, res) => {
-  const projectId = req.params.projectId;
-
+app.get("/api/requirements/:versionId", (req, res) => {
   db.all(
-    "SELECT * FROM requirements WHERE projectId = ? ORDER BY createdAt DESC",
-    [projectId],
+    "SELECT * FROM requirements WHERE versionId = ?",
+    [req.params.versionId],
     (err, rows) => {
       if (err) return res.status(500).json(err);
       res.json(rows);
@@ -86,19 +154,14 @@ app.get("/api/requirements/:projectId", (req, res) => {
   );
 });
 
-// Create requirement
 app.post("/api/requirements", (req, res) => {
-  const { projectId, type, title, description, priority, status } = req.body;
-
-  if (!projectId || !type || !title) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
+  const { versionId, type, title, description, priority, status } = req.body;
 
   db.run(
     `INSERT INTO requirements 
-    (projectId, type, title, description, priority, status) 
+    (versionId, type, title, description, priority, status) 
     VALUES (?, ?, ?, ?, ?, ?)`,
-    [projectId, type, title, description, priority || "Medium", status || "Draft"],
+    [versionId, type, title, description, priority, status],
     function (err) {
       if (err) return res.status(500).json(err);
       res.json({ id: this.lastID });
@@ -107,8 +170,10 @@ app.post("/api/requirements", (req, res) => {
 });
 
 /* ==============================
-   FRONTEND ROUTING
+   STATIC
 =================================*/
+
+app.use(express.static("public"));
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public/index.html"));
