@@ -4,25 +4,30 @@
   <title>BA Document Intelligence Studio</title>
   <style>
     body { font-family: Arial; margin: 40px; }
+    h1 { margin-bottom: 10px; }
     h2 { margin-top: 30px; }
     input, select, textarea { margin: 5px 0; padding: 6px; width: 300px; }
+    textarea { height: 80px; }
     button { padding: 6px 12px; margin: 5px 0; cursor: pointer; }
     .card { border: 1px solid #ddd; padding: 10px; margin: 5px 0; cursor: pointer; }
-    .breadcrumb { margin-bottom: 20px; font-weight: bold; }
+    .breadcrumb { margin-bottom: 20px; font-weight: bold; color: #444; }
   </style>
 </head>
 <body>
 
 <h1>BA Document Intelligence Studio</h1>
-
 <div class="breadcrumb" id="breadcrumb"></div>
-
 <div id="content"></div>
 
 <script>
+
 let currentProject = null;
 let currentDocument = null;
 let currentVersion = null;
+
+/* ============================
+   BREADCRUMB
+============================ */
 
 function setBreadcrumb() {
   let text = "Projects";
@@ -64,8 +69,13 @@ async function loadProjects() {
 }
 
 async function createProject() {
-  const name = document.getElementById("pname").value;
-  const description = document.getElementById("pdesc").value;
+  const name = document.getElementById("pname").value.trim();
+  const description = document.getElementById("pdesc").value.trim();
+
+  if (!name) {
+    alert("Project name is required.");
+    return;
+  }
 
   await fetch("/api/projects", {
     method: "POST",
@@ -89,6 +99,7 @@ function openProject(project) {
 
 async function loadDocuments() {
   setBreadcrumb();
+
   const res = await fetch(`/api/documents/${currentProject.id}`);
   const docs = await res.json();
 
@@ -119,8 +130,13 @@ async function loadDocuments() {
 }
 
 async function createDocument() {
-  const name = document.getElementById("dname").value;
+  const name = document.getElementById("dname").value.trim();
   const type = document.getElementById("dtype").value;
+
+  if (!name) {
+    alert("Document name is required.");
+    return;
+  }
 
   await fetch("/api/documents", {
     method: "POST",
@@ -147,6 +163,7 @@ function openDocument(doc) {
 
 async function loadVersions() {
   setBreadcrumb();
+
   const res = await fetch(`/api/versions/${currentDocument.id}`);
   const versions = await res.json();
 
@@ -170,8 +187,13 @@ async function loadVersions() {
 }
 
 async function createVersion() {
-  const versionNumber = document.getElementById("vnumber").value;
-  const changeLog = document.getElementById("vlog").value;
+  const versionNumber = document.getElementById("vnumber").value.trim();
+  const changeLog = document.getElementById("vlog").value.trim();
+
+  if (!versionNumber) {
+    alert("Version number is required.");
+    return;
+  }
 
   await fetch("/api/versions", {
     method: "POST",
@@ -197,6 +219,7 @@ function openVersion(version) {
 
 async function loadRequirements() {
   setBreadcrumb();
+
   const res = await fetch(`/api/requirements/${currentVersion.id}`);
   const reqs = await res.json();
 
@@ -236,12 +259,52 @@ async function loadRequirements() {
   document.getElementById("content").innerHTML = html;
 }
 
-{
+async function createRequirement() {
+
   const type = document.getElementById("rtype").value;
-  const title = document.getElementById("rtitle").value;
-  const description = document.getElementById("rdesc").value;
+  const title = document.getElementById("rtitle").value.trim();
+  const description = document.getElementById("rdesc").value.trim();
   const priority = document.getElementById("rpriority").value;
   const status = document.getElementById("rstatus").value;
+
+  if (!title) {
+    alert("Title is required.");
+    return;
+  }
+
+  if (!description) {
+    alert("Description is required.");
+    return;
+  }
+
+  if (type === "US") {
+    const pattern = /As a .*I want .*So that .*/i;
+    if (!pattern.test(description)) {
+      alert("User Story must follow:\nAs a [role]\nI want [goal]\nSo that [benefit]");
+      return;
+    }
+  }
+
+  if (type === "AC") {
+    if (!description.includes("Given") ||
+        !description.includes("When") ||
+        !description.includes("Then")) {
+      alert("Acceptance Criteria must include:\nGiven...\nWhen...\nThen...");
+      return;
+    }
+  }
+
+  const res = await fetch(`/api/requirements/${currentVersion.id}`);
+  const existing = await res.json();
+
+  const duplicate = existing.find(r =>
+    r.title.toLowerCase() === title.toLowerCase()
+  );
+
+  if (duplicate) {
+    alert("Duplicate title in this version.");
+    return;
+  }
 
   await fetch("/api/requirements", {
     method: "POST",
@@ -260,6 +323,7 @@ async function loadRequirements() {
 }
 
 loadProjects();
+
 </script>
 
 </body>
