@@ -7,17 +7,13 @@ const OpenAI = require("openai");
 const app = express();
 app.use(express.json());
 
-/* ==============================
-   OPENAI SETUP
-=================================*/
+/* ================= OPENAI ================= */
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-/* ==============================
-   DATABASE
-=================================*/
+/* ================= DATABASE ================= */
 
 const db = new sqlite3.Database("./database.db");
 
@@ -65,11 +61,20 @@ db.serialize(() => {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS ai_reviews (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      versionId INTEGER,
+      provider TEXT,
+      result_json TEXT,
+      qualityScore INTEGER,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
 });
 
-/* ==============================
-   AI REVIEW ENDPOINT
-=================================*/
+/* ================= AI REVIEW ================= */
 
 app.post("/api/ai-review/:versionId", async (req, res) => {
 
@@ -84,18 +89,20 @@ app.post("/api/ai-review/:versionId", async (req, res) => {
         return res.json({ message: "No requirements found." });
       }
 
-      const formattedRequirements = requirements.map(r =>
+      const formatted = requirements.map(r =>
         `[${r.type}] ${r.title}\n${r.description}`
       ).join("\n\n");
 
       const prompt = `
 You are a Senior Business Analyst.
 
-Review the following software requirements.
+Review the following requirements.
 
-Return STRICT JSON with structure:
+Return STRICT JSON:
 
 {
+  "qualityScore": number (0-100),
+  "summary": "short paragraph",
   "missingAC": [],
   "edgeCases": [],
   "inconsistency": [],
@@ -104,7 +111,7 @@ Return STRICT JSON with structure:
 }
 
 Requirements:
-${formattedRequirements}
+${formatted}
 `;
 
       try {
@@ -124,8 +131,23 @@ ${formattedRequirements}
         try {
           parsed = JSON.parse(content);
         } catch {
-          parsed = { raw: content };
+          parsed = {
+            qualityScore: 0,
+            summary: "Failed to parse AI response.",
+            raw: content
+          };
         }
+
+        db.run(
+          `INSERT INTO ai_reviews (versionId, provider, result_json, qualityScore)
+           VALUES (?, ?, ?, ?)`,
+          [
+            versionId,
+            "openai",
+            JSON.stringify(parsed),
+            parsed.qualityScore || 0
+          ]
+        );
 
         res.json(parsed);
 
@@ -139,9 +161,17 @@ ${formattedRequirements}
 
 });
 
-/* ==============================
-   EXPORT WORD (UNCHANGED)
-=================================*/
+/* ================= GET AI HISTORY ================= */
+
+app.get("/api/ai-reviews/:versionId", (req, res) => {
+  db.all(
+    "SELECT * FROM ai_reviews WHERE versionId = ? ORDER BY createdAt DESC",
+    [req.params.versionId],
+    (err, rows) => res.json(rows)
+  );
+});
+
+/* ================= EXPORT WORD ================= */
 
 app.get("/api/export/:versionId", (req, res) => {
 
@@ -161,9 +191,7 @@ app.get("/api/export/:versionId", (req, res) => {
                 new Paragraph(""),
                 ...requirements.map(r =>
                   new Paragraph({
-                    children: [
-                      new TextRun({ text: `[${r.type}] ${r.title}`, bold: true })
-                    ]
+                    children: [new TextRun({ text: `[${r.type}] ${r.title}`, bold: true })]
                   })
                 ),
                 ...requirements.map(r => new Paragraph(r.description))
@@ -183,9 +211,7 @@ app.get("/api/export/:versionId", (req, res) => {
 
 });
 
-/* ==============================
-   BASIC CRUD (UNCHANGED)
-=================================*/
+/* ================= BASIC CRUD ================= */
 
 app.get("/api/projects", (req, res) => {
   db.all("SELECT * FROM projects", [], (err, rows) => res.json(rows));
@@ -246,9 +272,7 @@ app.post("/api/requirements", (req, res) => {
   );
 });
 
-/* ==============================
-   STATIC
-=================================*/
+/* ================= STATIC ================= */
 
 app.use(express.static("public"));
 app.get("*", (req, res) => {
