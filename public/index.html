@@ -6,11 +6,14 @@
     body { font-family: Arial; margin: 40px; }
     h1 { margin-bottom: 10px; }
     h2 { margin-top: 30px; }
-    input, select, textarea { margin: 5px 0; padding: 6px; width: 300px; }
-    textarea { height: 80px; }
+    input, select, textarea { margin: 5px 0; padding: 6px; width: 320px; }
+    textarea { height: 90px; }
     button { padding: 6px 12px; margin: 5px 5px 5px 0; cursor: pointer; }
     .card { border: 1px solid #ddd; padding: 10px; margin: 5px 0; cursor: pointer; }
     .breadcrumb { margin-bottom: 20px; font-weight: bold; color: #444; }
+    .ai-box { border: 1px solid #aaa; padding: 10px; margin-top: 15px; background:#f9f9f9; }
+    .ai-section { margin-bottom: 10px; }
+    .ai-section h4 { margin-bottom: 5px; }
   </style>
 </head>
 <body>
@@ -49,14 +52,11 @@ async function loadProjects() {
     <input id="pname" placeholder="Project name"/>
     <textarea id="pdesc" placeholder="Description"></textarea><br>
     <button onclick="createProject()">Create</button>
-
     <h2>Projects</h2>
   `;
 
   projects.forEach(p => {
-    html += `<div class="card" onclick='openProject(${JSON.stringify(p)})'>
-      ${p.name}
-    </div>`;
+    html += `<div class="card" onclick='openProject(${JSON.stringify(p)})'>${p.name}</div>`;
   });
 
   document.getElementById("content").innerHTML = html;
@@ -65,19 +65,18 @@ async function loadProjects() {
 async function createProject() {
   const name = document.getElementById("pname").value.trim();
   const description = document.getElementById("pdesc").value.trim();
-
-  if (!name) return alert("Project name is required.");
+  if (!name) return alert("Project name required");
 
   await fetch("/api/projects", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ name, description })
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({name,description})
   });
 
   loadProjects();
 }
 
-function openProject(project) {
+function openProject(project){
   currentProject = project;
   currentDocument = null;
   currentVersion = null;
@@ -86,9 +85,8 @@ function openProject(project) {
 
 /* ================= DOCUMENTS ================= */
 
-async function loadDocuments() {
+async function loadDocuments(){
   setBreadcrumb();
-
   const res = await fetch(`/api/documents/${currentProject.id}`);
   const docs = await res.json();
 
@@ -105,11 +103,10 @@ async function loadDocuments() {
       <option>API Spec</option>
     </select><br>
     <button onclick="createDocument()">Create</button>
-
     <h2>Documents</h2>
   `;
 
-  docs.forEach(d => {
+  docs.forEach(d=>{
     html += `<div class="card" onclick='openDocument(${JSON.stringify(d)})'>
       ${d.name} (${d.type})
     </div>`;
@@ -118,25 +115,21 @@ async function loadDocuments() {
   document.getElementById("content").innerHTML = html;
 }
 
-async function createDocument() {
+async function createDocument(){
   const name = document.getElementById("dname").value.trim();
   const type = document.getElementById("dtype").value;
-  if (!name) return alert("Document name is required.");
+  if(!name) return alert("Document name required");
 
-  await fetch("/api/documents", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      projectId: currentProject.id,
-      name,
-      type
-    })
+  await fetch("/api/documents",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({projectId:currentProject.id,name,type})
   });
 
   loadDocuments();
 }
 
-function openDocument(doc) {
+function openDocument(doc){
   currentDocument = doc;
   currentVersion = null;
   loadVersions();
@@ -144,23 +137,21 @@ function openDocument(doc) {
 
 /* ================= VERSIONS ================= */
 
-async function loadVersions() {
+async function loadVersions(){
   setBreadcrumb();
-
   const res = await fetch(`/api/versions/${currentDocument.id}`);
   const versions = await res.json();
 
   let html = `
     <button onclick="loadDocuments()">← Back</button>
     <h2>Create Version</h2>
-    <input id="vnumber" placeholder="Version (e.g., 1.0)"/>
+    <input id="vnumber" placeholder="Version (e.g. 1.0)"/>
     <textarea id="vlog" placeholder="Change log"></textarea><br>
     <button onclick="createVersion()">Create</button>
-
     <h2>Versions</h2>
   `;
 
-  versions.forEach(v => {
+  versions.forEach(v=>{
     html += `<div class="card" onclick='openVersion(${JSON.stringify(v)})'>
       v${v.versionNumber}
     </div>`;
@@ -169,41 +160,36 @@ async function loadVersions() {
   document.getElementById("content").innerHTML = html;
 }
 
-async function createVersion() {
+async function createVersion(){
   const versionNumber = document.getElementById("vnumber").value.trim();
   const changeLog = document.getElementById("vlog").value.trim();
-  if (!versionNumber) return alert("Version number is required.");
+  if(!versionNumber) return alert("Version required");
 
-  await fetch("/api/versions", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      documentId: currentDocument.id,
-      versionNumber,
-      changeLog
-    })
+  await fetch("/api/versions",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({documentId:currentDocument.id,versionNumber,changeLog})
   });
 
   loadVersions();
 }
 
-function openVersion(version) {
+function openVersion(version){
   currentVersion = version;
   loadRequirements();
 }
 
 /* ================= REQUIREMENTS ================= */
 
-async function loadRequirements() {
+async function loadRequirements(){
   setBreadcrumb();
-
   const res = await fetch(`/api/requirements/${currentVersion.id}`);
   const reqs = await res.json();
 
   let html = `
     <button onclick="loadVersions()">← Back</button>
+    <button onclick="runAIReview()">AI Review</button>
     <button onclick="exportWord()">Export to Word</button>
-
     <h2>Create Requirement</h2>
     <select id="rtype">
       <option>UC</option>
@@ -225,70 +211,77 @@ async function loadRequirements() {
       <option>Approved</option>
     </select><br>
     <button onclick="createRequirement()">Create</button>
-
     <h2>Requirements</h2>
   `;
 
-  reqs.forEach(r => {
-    html += `<div class="card">
-      [${r.type}] ${r.title} (${r.priority})
-    </div>`;
+  reqs.forEach(r=>{
+    html += `<div class="card">[${r.type}] ${r.title} (${r.priority})</div>`;
   });
+
+  html += `<div id="aiResult"></div>`;
 
   document.getElementById("content").innerHTML = html;
 }
 
-async function createRequirement() {
-  const type = document.getElementById("rtype").value;
-  const title = document.getElementById("rtitle").value.trim();
-  const description = document.getElementById("rdesc").value.trim();
-  const priority = document.getElementById("rpriority").value;
-  const status = document.getElementById("rstatus").value;
+async function createRequirement(){
+  const type=document.getElementById("rtype").value;
+  const title=document.getElementById("rtitle").value.trim();
+  const description=document.getElementById("rdesc").value.trim();
+  const priority=document.getElementById("rpriority").value;
+  const status=document.getElementById("rstatus").value;
 
-  if (!title) return alert("Title is required.");
-  if (!description) return alert("Description is required.");
+  if(!title) return alert("Title required");
+  if(!description) return alert("Description required");
 
-  if (type === "US") {
-    const pattern = /As a .*I want .*So that .*/i;
-    if (!pattern.test(description)) {
-      return alert("User Story must follow:\nAs a [role]\nI want [goal]\nSo that [benefit]");
-    }
-  }
-
-  if (type === "AC") {
-    if (!description.includes("Given") ||
-        !description.includes("When") ||
-        !description.includes("Then")) {
-      return alert("Acceptance Criteria must include:\nGiven...\nWhen...\nThen...");
-    }
-  }
-
-  const res = await fetch(`/api/requirements/${currentVersion.id}`);
-  const existing = await res.json();
-
-  if (existing.find(r => r.title.toLowerCase() === title.toLowerCase())) {
-    return alert("Duplicate title in this version.");
-  }
-
-  await fetch("/api/requirements", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      versionId: currentVersion.id,
-      type,
-      title,
-      description,
-      priority,
-      status
-    })
+  await fetch("/api/requirements",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({versionId:currentVersion.id,type,title,description,priority,status})
   });
 
   loadRequirements();
 }
 
-/* ================= EXPORT ================= */
+/* ================= AI REVIEW ================= */
 
-function exportWord() {
+async function runAIReview(){
+  document.getElementById("aiResult").innerHTML = "Running AI review...";
+
+  const res = await fetch(`/api/ai-review/${currentVersion.id}`,{
+    method:"POST"
+  });
+
+  const data = await res.json();
+
+  if(data.raw){
+    document.getElementById("aiResult").innerHTML =
+      `<div class="ai-box"><pre>${data.raw}</pre></div>`;
+    return;
+  }
+
+  function renderSection(title, items){
+    if(!items || items.length===0) return "";
+    return `
+      <div class="ai-section">
+        <h4>${title}</h4>
+        <ul>${items.map(i=>`<li>${i}</li>`).join("")}</ul>
+      </div>
+    `;
+  }
+
+  document.getElementById("aiResult").innerHTML = `
+    <div class="ai-box">
+      <h3>AI Review Result</h3>
+      ${renderSection("Missing AC", data.missingAC)}
+      ${renderSection("Edge Cases", data.edgeCases)}
+      ${renderSection("Inconsistency", data.inconsistency)}
+      ${renderSection("Risk", data.risk)}
+      ${renderSection("Suggested NFR", data.suggestedNFR)}
+    </div>
+  `;
+}
+
+function exportWord(){
   window.location.href = `/api/export/${currentVersion.id}`;
 }
 
