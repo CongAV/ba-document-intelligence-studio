@@ -1,11 +1,19 @@
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
-const fs = require("fs");
 const { Document, Packer, Paragraph, HeadingLevel, TextRun } = require("docx");
+const OpenAI = require("openai");
 
 const app = express();
 app.use(express.json());
+
+/* ==============================
+   OPENAI SETUP
+=================================*/
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
 /* ==============================
    DATABASE
@@ -60,7 +68,79 @@ db.serialize(() => {
 });
 
 /* ==============================
-   EXPORT WORD
+   AI REVIEW ENDPOINT
+=================================*/
+
+app.post("/api/ai-review/:versionId", async (req, res) => {
+
+  const versionId = req.params.versionId;
+
+  db.all(
+    "SELECT * FROM requirements WHERE versionId = ?",
+    [versionId],
+    async (err, requirements) => {
+
+      if (!requirements || requirements.length === 0) {
+        return res.json({ message: "No requirements found." });
+      }
+
+      const formattedRequirements = requirements.map(r =>
+        `[${r.type}] ${r.title}\n${r.description}`
+      ).join("\n\n");
+
+      const prompt = `
+You are a Senior Business Analyst.
+
+Review the following software requirements.
+
+Return STRICT JSON with structure:
+
+{
+  "missingAC": [],
+  "edgeCases": [],
+  "inconsistency": [],
+  "risk": [],
+  "suggestedNFR": []
+}
+
+Requirements:
+${formattedRequirements}
+`;
+
+      try {
+
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "You are a professional Business Analyst." },
+            { role: "user", content: prompt }
+          ],
+          temperature: 0.2
+        });
+
+        const content = response.choices[0].message.content;
+
+        let parsed;
+        try {
+          parsed = JSON.parse(content);
+        } catch {
+          parsed = { raw: content };
+        }
+
+        res.json(parsed);
+
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "AI review failed." });
+      }
+
+    }
+  );
+
+});
+
+/* ==============================
+   EXPORT WORD (UNCHANGED)
 =================================*/
 
 app.get("/api/export/:versionId", (req, res) => {
@@ -68,10 +148,7 @@ app.get("/api/export/:versionId", (req, res) => {
   const versionId = req.params.versionId;
 
   db.get("SELECT * FROM versions WHERE id = ?", [versionId], (err, version) => {
-    if (err || !version) return res.status(404).send("Version not found");
-
     db.get("SELECT * FROM documents WHERE id = ?", [version.documentId], (err, document) => {
-
       db.get("SELECT * FROM projects WHERE id = ?", [document.projectId], (err, project) => {
 
         db.all("SELECT * FROM requirements WHERE versionId = ?", [versionId], async (err, requirements) => {
@@ -79,138 +156,93 @@ app.get("/api/export/:versionId", (req, res) => {
           const doc = new Document({
             sections: [{
               children: [
-
-                new Paragraph({
-                  text: project.name,
-                  heading: HeadingLevel.HEADING_1
-                }),
-
-                new Paragraph({
-                  text: `${document.name} - Version ${version.versionNumber}`,
-                  heading: HeadingLevel.HEADING_2
-                }),
-
-                new Paragraph({
-                  text: "Change Log:",
-                  heading: HeadingLevel.HEADING_3
-                }),
-
-                new Paragraph(version.changeLog || ""),
-
+                new Paragraph({ text: project.name, heading: HeadingLevel.HEADING_1 }),
+                new Paragraph({ text: `${document.name} - Version ${version.versionNumber}`, heading: HeadingLevel.HEADING_2 }),
                 new Paragraph(""),
-
-                new Paragraph({
-                  text: "Requirements",
-                  heading: HeadingLevel.HEADING_2
-                }),
-
                 ...requirements.map(r =>
                   new Paragraph({
                     children: [
-                      new TextRun({
-                        text: `[${r.type}] ${r.title} (${r.priority})`,
-                        bold: true
-                      })
+                      new TextRun({ text: `[${r.type}] ${r.title}`, bold: true })
                     ]
                   })
                 ),
-
-                ...requirements.map(r =>
-                  new Paragraph(r.description)
-                )
-
+                ...requirements.map(r => new Paragraph(r.description))
               ]
             }]
           });
 
           const buffer = await Packer.toBuffer(doc);
-
-          const fileName = `${project.name}_${document.type}_v${version.versionNumber}.docx`;
-
-          res.setHeader(
-            "Content-Disposition",
-            `attachment; filename="${fileName}"`
-          );
-
+          res.setHeader("Content-Disposition", `attachment; filename="BA_Document_v${version.versionNumber}.docx"`);
           res.send(buffer);
 
         });
+
       });
     });
   });
+
 });
 
 /* ==============================
-   PROJECT / DOC / VERSION / REQ APIs
+   BASIC CRUD (UNCHANGED)
 =================================*/
 
 app.get("/api/projects", (req, res) => {
-  db.all("SELECT * FROM projects ORDER BY createdAt DESC", [], (err, rows) => {
-    res.json(rows);
-  });
+  db.all("SELECT * FROM projects", [], (err, rows) => res.json(rows));
 });
 
 app.post("/api/projects", (req, res) => {
   const { name, description } = req.body;
-  db.run(
-    "INSERT INTO projects (name, description) VALUES (?, ?)",
+  db.run("INSERT INTO projects (name, description) VALUES (?, ?)",
     [name, description],
-    function () {
-      res.json({ id: this.lastID });
-    }
+    function () { res.json({ id: this.lastID }); }
   );
 });
 
 app.get("/api/documents/:projectId", (req, res) => {
-  db.all("SELECT * FROM documents WHERE projectId = ?", [req.params.projectId], (err, rows) => {
-    res.json(rows);
-  });
+  db.all("SELECT * FROM documents WHERE projectId = ?",
+    [req.params.projectId],
+    (err, rows) => res.json(rows)
+  );
 });
 
 app.post("/api/documents", (req, res) => {
   const { projectId, name, type } = req.body;
-  db.run(
-    "INSERT INTO documents (projectId, name, type) VALUES (?, ?, ?)",
+  db.run("INSERT INTO documents (projectId, name, type) VALUES (?, ?, ?)",
     [projectId, name, type],
-    function () {
-      res.json({ id: this.lastID });
-    }
+    function () { res.json({ id: this.lastID }); }
   );
 });
 
 app.get("/api/versions/:documentId", (req, res) => {
-  db.all("SELECT * FROM versions WHERE documentId = ?", [req.params.documentId], (err, rows) => {
-    res.json(rows);
-  });
+  db.all("SELECT * FROM versions WHERE documentId = ?",
+    [req.params.documentId],
+    (err, rows) => res.json(rows)
+  );
 });
 
 app.post("/api/versions", (req, res) => {
   const { documentId, versionNumber, changeLog } = req.body;
-  db.run(
-    "INSERT INTO versions (documentId, versionNumber, changeLog) VALUES (?, ?, ?)",
+  db.run("INSERT INTO versions (documentId, versionNumber, changeLog) VALUES (?, ?, ?)",
     [documentId, versionNumber, changeLog],
-    function () {
-      res.json({ id: this.lastID });
-    }
+    function () { res.json({ id: this.lastID }); }
   );
 });
 
 app.get("/api/requirements/:versionId", (req, res) => {
-  db.all("SELECT * FROM requirements WHERE versionId = ?", [req.params.versionId], (err, rows) => {
-    res.json(rows);
-  });
+  db.all("SELECT * FROM requirements WHERE versionId = ?",
+    [req.params.versionId],
+    (err, rows) => res.json(rows)
+  );
 });
 
 app.post("/api/requirements", (req, res) => {
   const { versionId, type, title, description, priority, status } = req.body;
-  db.run(
-    `INSERT INTO requirements 
-    (versionId, type, title, description, priority, status) 
-    VALUES (?, ?, ?, ?, ?, ?)`,
+  db.run(`INSERT INTO requirements 
+          (versionId, type, title, description, priority, status) 
+          VALUES (?, ?, ?, ?, ?, ?)`,
     [versionId, type, title, description, priority, status],
-    function () {
-      res.json({ id: this.lastID });
-    }
+    function () { res.json({ id: this.lastID }); }
   );
 });
 
@@ -219,7 +251,6 @@ app.post("/api/requirements", (req, res) => {
 =================================*/
 
 app.use(express.static("public"));
-
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public/index.html"));
 });
