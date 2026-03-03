@@ -1,6 +1,8 @@
 const express = require("express");
 const sqlite3 = require("sqlite3").verbose();
 const path = require("path");
+const fs = require("fs");
+const { Document, Packer, Paragraph, HeadingLevel, TextRun } = require("docx");
 
 const app = express();
 app.use(express.json());
@@ -58,112 +60,155 @@ db.serialize(() => {
 });
 
 /* ==============================
-   PROJECT APIs
+   EXPORT WORD
+=================================*/
+
+app.get("/api/export/:versionId", (req, res) => {
+
+  const versionId = req.params.versionId;
+
+  db.get("SELECT * FROM versions WHERE id = ?", [versionId], (err, version) => {
+    if (err || !version) return res.status(404).send("Version not found");
+
+    db.get("SELECT * FROM documents WHERE id = ?", [version.documentId], (err, document) => {
+
+      db.get("SELECT * FROM projects WHERE id = ?", [document.projectId], (err, project) => {
+
+        db.all("SELECT * FROM requirements WHERE versionId = ?", [versionId], async (err, requirements) => {
+
+          const doc = new Document({
+            sections: [{
+              children: [
+
+                new Paragraph({
+                  text: project.name,
+                  heading: HeadingLevel.HEADING_1
+                }),
+
+                new Paragraph({
+                  text: `${document.name} - Version ${version.versionNumber}`,
+                  heading: HeadingLevel.HEADING_2
+                }),
+
+                new Paragraph({
+                  text: "Change Log:",
+                  heading: HeadingLevel.HEADING_3
+                }),
+
+                new Paragraph(version.changeLog || ""),
+
+                new Paragraph(""),
+
+                new Paragraph({
+                  text: "Requirements",
+                  heading: HeadingLevel.HEADING_2
+                }),
+
+                ...requirements.map(r =>
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: `[${r.type}] ${r.title} (${r.priority})`,
+                        bold: true
+                      })
+                    ]
+                  })
+                ),
+
+                ...requirements.map(r =>
+                  new Paragraph(r.description)
+                )
+
+              ]
+            }]
+          });
+
+          const buffer = await Packer.toBuffer(doc);
+
+          const fileName = `${project.name}_${document.type}_v${version.versionNumber}.docx`;
+
+          res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="${fileName}"`
+          );
+
+          res.send(buffer);
+
+        });
+      });
+    });
+  });
+});
+
+/* ==============================
+   PROJECT / DOC / VERSION / REQ APIs
 =================================*/
 
 app.get("/api/projects", (req, res) => {
   db.all("SELECT * FROM projects ORDER BY createdAt DESC", [], (err, rows) => {
-    if (err) return res.status(500).json(err);
     res.json(rows);
   });
 });
 
 app.post("/api/projects", (req, res) => {
   const { name, description } = req.body;
-
-  if (!name) return res.status(400).json({ error: "Missing name" });
-
   db.run(
     "INSERT INTO projects (name, description) VALUES (?, ?)",
-    [name, description || ""],
-    function (err) {
-      if (err) return res.status(500).json(err);
+    [name, description],
+    function () {
       res.json({ id: this.lastID });
     }
   );
 });
 
-/* ==============================
-   DOCUMENT APIs
-=================================*/
-
 app.get("/api/documents/:projectId", (req, res) => {
-  db.all(
-    "SELECT * FROM documents WHERE projectId = ?",
-    [req.params.projectId],
-    (err, rows) => {
-      if (err) return res.status(500).json(err);
-      res.json(rows);
-    }
-  );
+  db.all("SELECT * FROM documents WHERE projectId = ?", [req.params.projectId], (err, rows) => {
+    res.json(rows);
+  });
 });
 
 app.post("/api/documents", (req, res) => {
   const { projectId, name, type } = req.body;
-
   db.run(
     "INSERT INTO documents (projectId, name, type) VALUES (?, ?, ?)",
     [projectId, name, type],
-    function (err) {
-      if (err) return res.status(500).json(err);
+    function () {
       res.json({ id: this.lastID });
     }
   );
 });
 
-/* ==============================
-   VERSION APIs
-=================================*/
-
 app.get("/api/versions/:documentId", (req, res) => {
-  db.all(
-    "SELECT * FROM versions WHERE documentId = ?",
-    [req.params.documentId],
-    (err, rows) => {
-      if (err) return res.status(500).json(err);
-      res.json(rows);
-    }
-  );
+  db.all("SELECT * FROM versions WHERE documentId = ?", [req.params.documentId], (err, rows) => {
+    res.json(rows);
+  });
 });
 
 app.post("/api/versions", (req, res) => {
   const { documentId, versionNumber, changeLog } = req.body;
-
   db.run(
     "INSERT INTO versions (documentId, versionNumber, changeLog) VALUES (?, ?, ?)",
     [documentId, versionNumber, changeLog],
-    function (err) {
-      if (err) return res.status(500).json(err);
+    function () {
       res.json({ id: this.lastID });
     }
   );
 });
 
-/* ==============================
-   REQUIREMENT APIs
-=================================*/
-
 app.get("/api/requirements/:versionId", (req, res) => {
-  db.all(
-    "SELECT * FROM requirements WHERE versionId = ?",
-    [req.params.versionId],
-    (err, rows) => {
-      if (err) return res.status(500).json(err);
-      res.json(rows);
-    }
-  );
+  db.all("SELECT * FROM requirements WHERE versionId = ?", [req.params.versionId], (err, rows) => {
+    res.json(rows);
+  });
 });
 
 app.post("/api/requirements", (req, res) => {
   const { versionId, type, title, description, priority, status } = req.body;
-
   db.run(
     `INSERT INTO requirements 
     (versionId, type, title, description, priority, status) 
     VALUES (?, ?, ?, ?, ?, ?)`,
     [versionId, type, title, description, priority, status],
-    function (err) {
-      if (err) return res.status(500).json(err);
+    function () {
       res.json({ id: this.lastID });
     }
   );
@@ -179,12 +224,7 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public/index.html"));
 });
 
-/* ==============================
-   START SERVER
-=================================*/
-
 const PORT = process.env.PORT || 3000;
-
 app.listen(PORT, () => {
   console.log("Server running on port", PORT);
 });
