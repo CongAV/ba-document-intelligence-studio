@@ -1,0 +1,13 @@
+{
+  "name": "ba-document-intelligence-studio",
+  "version": "1.0.0",
+  "description": "Single-user BA Tool",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "sqlite3": "^5.1.6"
+  }
+}
