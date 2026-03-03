@@ -8,7 +8,7 @@
     h2 { margin-top: 30px; }
     input, select, textarea { margin: 5px 0; padding: 6px; width: 300px; }
     textarea { height: 80px; }
-    button { padding: 6px 12px; margin: 5px 0; cursor: pointer; }
+    button { padding: 6px 12px; margin: 5px 5px 5px 0; cursor: pointer; }
     .card { border: 1px solid #ddd; padding: 10px; margin: 5px 0; cursor: pointer; }
     .breadcrumb { margin-bottom: 20px; font-weight: bold; color: #444; }
   </style>
@@ -25,10 +25,6 @@ let currentProject = null;
 let currentDocument = null;
 let currentVersion = null;
 
-/* ============================
-   BREADCRUMB
-============================ */
-
 function setBreadcrumb() {
   let text = "Projects";
   if (currentProject) text += " > " + currentProject.name;
@@ -37,9 +33,7 @@ function setBreadcrumb() {
   document.getElementById("breadcrumb").innerText = text;
 }
 
-/* ============================
-   PROJECTS
-============================ */
+/* ================= PROJECTS ================= */
 
 async function loadProjects() {
   currentProject = null;
@@ -72,10 +66,7 @@ async function createProject() {
   const name = document.getElementById("pname").value.trim();
   const description = document.getElementById("pdesc").value.trim();
 
-  if (!name) {
-    alert("Project name is required.");
-    return;
-  }
+  if (!name) return alert("Project name is required.");
 
   await fetch("/api/projects", {
     method: "POST",
@@ -93,9 +84,7 @@ function openProject(project) {
   loadDocuments();
 }
 
-/* ============================
-   DOCUMENTS
-============================ */
+/* ================= DOCUMENTS ================= */
 
 async function loadDocuments() {
   setBreadcrumb();
@@ -132,11 +121,7 @@ async function loadDocuments() {
 async function createDocument() {
   const name = document.getElementById("dname").value.trim();
   const type = document.getElementById("dtype").value;
-
-  if (!name) {
-    alert("Document name is required.");
-    return;
-  }
+  if (!name) return alert("Document name is required.");
 
   await fetch("/api/documents", {
     method: "POST",
@@ -157,9 +142,7 @@ function openDocument(doc) {
   loadVersions();
 }
 
-/* ============================
-   VERSIONS
-============================ */
+/* ================= VERSIONS ================= */
 
 async function loadVersions() {
   setBreadcrumb();
@@ -189,11 +172,7 @@ async function loadVersions() {
 async function createVersion() {
   const versionNumber = document.getElementById("vnumber").value.trim();
   const changeLog = document.getElementById("vlog").value.trim();
-
-  if (!versionNumber) {
-    alert("Version number is required.");
-    return;
-  }
+  if (!versionNumber) return alert("Version number is required.");
 
   await fetch("/api/versions", {
     method: "POST",
@@ -213,9 +192,7 @@ function openVersion(version) {
   loadRequirements();
 }
 
-/* ============================
-   REQUIREMENTS
-============================ */
+/* ================= REQUIREMENTS ================= */
 
 async function loadRequirements() {
   setBreadcrumb();
@@ -225,6 +202,8 @@ async function loadRequirements() {
 
   let html = `
     <button onclick="loadVersions()">← Back</button>
+    <button onclick="exportWord()">Export to Word</button>
+
     <h2>Create Requirement</h2>
     <select id="rtype">
       <option>UC</option>
@@ -260,28 +239,19 @@ async function loadRequirements() {
 }
 
 async function createRequirement() {
-
   const type = document.getElementById("rtype").value;
   const title = document.getElementById("rtitle").value.trim();
   const description = document.getElementById("rdesc").value.trim();
   const priority = document.getElementById("rpriority").value;
   const status = document.getElementById("rstatus").value;
 
-  if (!title) {
-    alert("Title is required.");
-    return;
-  }
-
-  if (!description) {
-    alert("Description is required.");
-    return;
-  }
+  if (!title) return alert("Title is required.");
+  if (!description) return alert("Description is required.");
 
   if (type === "US") {
     const pattern = /As a .*I want .*So that .*/i;
     if (!pattern.test(description)) {
-      alert("User Story must follow:\nAs a [role]\nI want [goal]\nSo that [benefit]");
-      return;
+      return alert("User Story must follow:\nAs a [role]\nI want [goal]\nSo that [benefit]");
     }
   }
 
@@ -289,21 +259,15 @@ async function createRequirement() {
     if (!description.includes("Given") ||
         !description.includes("When") ||
         !description.includes("Then")) {
-      alert("Acceptance Criteria must include:\nGiven...\nWhen...\nThen...");
-      return;
+      return alert("Acceptance Criteria must include:\nGiven...\nWhen...\nThen...");
     }
   }
 
   const res = await fetch(`/api/requirements/${currentVersion.id}`);
   const existing = await res.json();
 
-  const duplicate = existing.find(r =>
-    r.title.toLowerCase() === title.toLowerCase()
-  );
-
-  if (duplicate) {
-    alert("Duplicate title in this version.");
-    return;
+  if (existing.find(r => r.title.toLowerCase() === title.toLowerCase())) {
+    return alert("Duplicate title in this version.");
   }
 
   await fetch("/api/requirements", {
@@ -320,6 +284,12 @@ async function createRequirement() {
   });
 
   loadRequirements();
+}
+
+/* ================= EXPORT ================= */
+
+function exportWord() {
+  window.location.href = `/api/export/${currentVersion.id}`;
 }
 
 loadProjects();
